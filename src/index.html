@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            .dot {
+                opacity: 0.6;
+            }
+
+            .axis path,
+            .axis line {
+                fill: none;
+                stroke: black;
+                shape-rendering: crispEdges;
+            }
+
+            .y.axis .tick {
+                display: none;
+            }
+
+            .focus-line,
+            .active-line {
+                stroke: red;
+            }
+
+            .active-line {
+                opacity: 0.5;
+            }
+
+            .focus-line.baseline-mode,
+            .baseline-line {
+                stroke: blue;
+            }
+
+            .baseline-line {
+                opacity: 0.5;
+            }
+
+            .overlay {
+                fill: none;
+                pointer-events: all;
+            }
+        </style>
+    </head>
+    <body>
+        <script src="/main.js"></script>
+        <script src="http://localhost:35729/livereload.js?snipver=1"></script>
+    </body>
+</html>

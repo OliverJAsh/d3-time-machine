@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "noImplicitAny": true
+    },
+    "files": [
+        "./main.ts",
+        "./typings/index.d.ts",
+        // https://github.com/Microsoft/TypeScript/issues/3005
+        "../node_modules/typescript/lib/lib.es6.d.ts"
+    ]
+}
