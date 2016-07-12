@@ -18,7 +18,7 @@ interface State {
 
 const rint = (n: number) => (Math.random() * (n + 1)) | 0;
 const rdate = (): Date => new Date(2016, rint(11), rint(28), rint(23));
-const revisions: Revision[] = range(0, 60).map((x, id) => ({
+const revisions: Revision[] = range(0, 30).map((x, id) => ({
     id,
     datasetSlug: 'fraud',
     createdAt: rdate(),
@@ -68,10 +68,10 @@ const focus$ = Observable.merge(focusSubject, resetSubject.map(x => undefined)).
 // Initial render
 //
 
-const radius = 10;
+const radius = 15;
 const margin = {top: 0, right: radius, bottom: 30, left: radius};
 const outerWidth = 700;
-const outerHeight = 200;
+const outerHeight = 100;
 const width = outerWidth - margin.left - margin.right;
 const height = outerHeight - margin.top - margin.bottom;
 
@@ -79,18 +79,10 @@ const xScale = d3.time.scale()
     .domain(d3.extent(revisions.map(d => d.createdAt.getTime())))
     .range([0, width]);
 
-const yScale = d3.scale.linear()
-    .domain([0, 23])
-    .range([height, 0]);
-
 const xAxis = d3.svg.axis()
     .scale(xScale)
     .ticks(d3.time.month)
     .tickFormat(d3.time.format('%m'));
-
-const yAxis = d3.svg.axis()
-    .scale(yScale)
-    .orient('left');
 
 const bodySelection = d3.select('body')
 const svgSelection = bodySelection
@@ -105,10 +97,6 @@ svgSelection.append('g')
     .attr('transform', `translate(0,${height})`)
     .call(xAxis);
 
-svgSelection.append('g')
-    .attr('class', 'y axis')
-    .call(yAxis);
-
 // Circles
 svgSelection.append('g')
     .selectAll('.dot')
@@ -118,7 +106,7 @@ svgSelection.append('g')
     .attr('class', 'dot')
     .attr('r', radius)
     .attr('cx', d => xScale(d.createdAt))
-    .attr('cy', d => yScale(d.createdAt.getHours()))
+    .attr('cy', height / 2)
     .append('title')
     .text(d => d.id)
 
