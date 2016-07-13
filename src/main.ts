@@ -1,6 +1,7 @@
 import * as d3 from 'd3';
 import { range, inRange } from 'lodash';
 import { Subject, Observable } from 'rx-lite';
+import { Option, None } from './option';
 
 interface Revision {
     id: number
@@ -11,9 +12,9 @@ interface Revision {
 
 interface State {
     baselineMode: boolean
-    active: Date | undefined
-    baseline: Date | undefined
-    focus: number | undefined
+    maybeActive: Option<Date>
+    maybeBaseline: Option<Date>
+    maybeFocus: Option<number>
 }
 
 const rint = (n: number) => (Math.random() * (n + 1)) | 0;
@@ -33,14 +34,17 @@ console.log(JSON.stringify(revisions, null, '\t'));
 
 const resetSubject = new Subject<boolean>()
 const baselineModeSubject = new Subject<boolean>()
-const baselineSubject = new Subject<Date>()
-const activeSubject = new Subject<Date>()
-const focusSubject = new Subject<number>()
+const baselineSubject = new Subject<Option<Date>>()
+const activeSubject = new Subject<Option<Date>>()
+const focusSubject = new Subject<Option<number>>()
 
-const inputActive$: Observable<Date | undefined> = Observable.merge(activeSubject, resetSubject.map(x => undefined))
-    .startWith(undefined)
-const inputBaseline$: Observable<Date | undefined> = Observable.merge(baselineSubject, resetSubject.map(x => undefined))
-    .startWith(undefined);
+const inputActive$: Observable<Option<Date>> = Observable.merge(activeSubject, resetSubject.map(x => None))
+    .startWith(None)
+const inputBaseline$: Observable<Option<Date>> = Observable.merge(
+    baselineSubject,
+    resetSubject.map(x => None)
+)
+    .startWith(None);
 const baselineMode$: Observable<boolean> = Observable.merge(
     baselineModeSubject,
     resetSubject.map(x => false),
@@ -48,21 +52,26 @@ const baselineMode$: Observable<boolean> = Observable.merge(
 )
     .startWith(false);
 
-const baseline$: Observable<Date | undefined> = Observable.combineLatest(inputBaseline$, inputActive$)
+const baseline$: Observable<Option<Date>> = Observable.combineLatest(inputBaseline$, inputActive$)
     .withLatestFrom(baselineMode$)
-    .scan((currentBaseline, [ [ inputBaseline, inputActive ], baselineMode ]) => (
+    .scan((maybeCurrentBaseline, [ [ maybeInputBaseline, maybeInputActive ], baselineMode ]) => (
         baselineMode
-            ? inputBaseline
-            : inputActive && (inputActive < currentBaseline ? inputActive : currentBaseline)
-    ), undefined as Date | undefined)
-const active$: Observable<Date | undefined> = Observable.combineLatest(inputActive$, inputBaseline$)
+            ? maybeInputBaseline
+            : maybeCurrentBaseline.flatMap(currentBaseline => (
+                maybeInputActive.map(inputActive => inputActive < currentBaseline ? inputActive : currentBaseline)
+            ))
+    ), None as Option<Date>)
+const active$: Observable<Option<Date>> = Observable.combineLatest(inputActive$, inputBaseline$)
     .withLatestFrom(baselineMode$)
-    .scan((currentActive, [ [ inputActive, inputBaseline ], baselineMode ]) => (
+    .scan((maybeCurrentActive, [ [ maybeInputActive, maybeInputBaseline ], baselineMode ]) => (
         baselineMode
-            ? inputBaseline && (inputBaseline > currentActive ? inputBaseline : currentActive)
-            : inputActive
-    ), undefined as Date | undefined)
-const focus$ = Observable.merge(focusSubject, resetSubject.map(x => undefined)).startWith(undefined)
+            ? maybeCurrentActive.flatMap(currentActive => (
+                maybeInputBaseline.map(inputBaseline => inputBaseline > currentActive ? inputBaseline : currentActive)
+            ))
+            : maybeInputActive
+    ), None as Option<Date>)
+const focus$: Observable<Option<number>> = Observable.merge(focusSubject, resetSubject.map(x => None))
+    .startWith(None);
 
 //
 // Initial render
@@ -132,7 +141,7 @@ interactionRectSelection
     .attr('height', outerHeight)
     .on('mousemove', () => {
         const [x] = d3.mouse(interactionRectEl);
-        focusSubject.onNext(x)
+        focusSubject.onNext(Option(x))
     })
 
 const toolbarSelection = bodySelection.append('div');
@@ -156,7 +165,7 @@ const focusedRevisionsSelection = bodySelection.append('ul')
 
 const state$: Observable<State> = Observable.combineLatest(
     baselineMode$, active$, baseline$, focus$,
-    (baselineMode, active, baseline, focus) => ({ baselineMode, active, baseline, focus }))
+    (baselineMode, maybeActive, maybeBaseline, maybeFocus) => ({ baselineMode, maybeActive, maybeBaseline, maybeFocus }))
 
 const getRevisionsFor = (x: number): Revision[] => (
     revisions.filter(d => {
@@ -174,40 +183,39 @@ const render = (state: State) => {
     baselineCheckboxSelection.property('checked', state.baselineMode);
 
     activeLineSelection
-        .attr('transform', state.active ? `translate(${xScale(state.active)})` : '')
-        .style('display', state.active ? '' : 'none')
+        .attr('transform', state.maybeActive.map(active => `translate(${xScale(active)})`).getOrElse(''))
+        .style('display', state.maybeActive.isEmpty ? 'none' : '')
 
     baselineLineSelection
-        .attr('transform', state.baseline ? `translate(${xScale(state.baseline)})` : '')
-        .style('display', state.baseline ? '' : 'none')
+        .attr('transform', state.maybeBaseline.map(baseline => `translate(${xScale(baseline)})`).getOrElse(''))
+        .style('display', state.maybeBaseline.isEmpty ? 'none' : '')
 
     focusLineSelection
-        .attr('transform', state.focus ? `translate(${state.focus})` : '')
-        .style('display', state.focus ? '' : 'none')
+        .attr('transform', state.maybeFocus.map(focus => `translate(${focus})`).getOrElse(''))
+        .style('display', state.maybeFocus.isEmpty ? 'none' : '')
         .classed('baseline-mode', state.baselineMode)
 
     interactionRectSelection.on('click', () => {
         if (state.baselineMode) {
             const [x] = d3.mouse(interactionRectEl);
             const date = xScale.invert(x);
-            baselineSubject.onNext(date);
+            baselineSubject.onNext(Option(date));
         } else {
             const [x] = d3.mouse(interactionRectEl);
             const date = xScale.invert(x);
-            activeSubject.onNext(date);
+            activeSubject.onNext(Option(date));
         }
     });
 
-    activeSelection.text(`Active: ${state.active && state.active.getTime()}`)
-    baselineSelection.text(`Baseline: ${state.baseline && state.baseline.getTime()}`)
+    activeSelection.text(`Active: ${state.maybeActive
+        .map(active => String(active.getTime())).getOrElse('')}`)
+    baselineSelection.text(`Baseline: ${state.maybeBaseline
+        .map(baseline => String(baseline.getTime())).getOrElse('')}`)
 
-    // Control flow based analysis! focus is number | undefined, but number inside
-    // of the guard.
-    if (state.focus) {
-        focusedRevisionsSelection.html(getRevisionsFor(state.focus)
-            .map(revision => `<li>${JSON.stringify(revision, null, '\t')}</li>`)
-            .join(''))
-    }
+    const focusedRevisions = state.maybeFocus.map(getRevisionsFor).getOrElse([]);
+    focusedRevisionsSelection.html(focusedRevisions
+        .map(revision => `<li>${JSON.stringify(revision, null, '\t')}</li>`)
+        .join(''))
 };
 
 state$.subscribe(render);
