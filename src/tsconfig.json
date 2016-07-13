@@ -1,6 +1,7 @@
 {
     "compilerOptions": {
-        "noImplicitAny": true
+        "noImplicitAny": true,
+        "strictNullChecks": true
     },
     "files": [
         "./main.ts",

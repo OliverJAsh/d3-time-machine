@@ -11,9 +11,9 @@ interface Revision {
 
 interface State {
     baselineMode: boolean
-    active: Date
-    baseline: Date
-    focus: number
+    active: Date | undefined
+    baseline: Date | undefined
+    focus: number | undefined
 }
 
 const rint = (n: number) => (Math.random() * (n + 1)) | 0;
@@ -37,9 +37,9 @@ const baselineSubject = new Subject<Date>()
 const activeSubject = new Subject<Date>()
 const focusSubject = new Subject<number>()
 
-const inputActive$: Observable<Date> = Observable.merge(activeSubject, resetSubject.map(x => undefined))
+const inputActive$: Observable<Date | undefined> = Observable.merge(activeSubject, resetSubject.map(x => undefined))
     .startWith(undefined)
-const inputBaseline$: Observable<Date> = Observable.merge(baselineSubject, resetSubject.map(x => undefined))
+const inputBaseline$: Observable<Date | undefined> = Observable.merge(baselineSubject, resetSubject.map(x => undefined))
     .startWith(undefined);
 const baselineMode$: Observable<boolean> = Observable.merge(
     baselineModeSubject,
@@ -48,20 +48,20 @@ const baselineMode$: Observable<boolean> = Observable.merge(
 )
     .startWith(false);
 
-const baseline$: Observable<Date> = Observable.combineLatest(inputBaseline$, inputActive$)
+const baseline$: Observable<Date | undefined> = Observable.combineLatest(inputBaseline$, inputActive$)
     .withLatestFrom(baselineMode$)
     .scan((currentBaseline, [ [ inputBaseline, inputActive ], baselineMode ]) => (
         baselineMode
             ? inputBaseline
             : inputActive && (inputActive < currentBaseline ? inputActive : currentBaseline)
-    ), undefined as Date)
-const active$: Observable<Date> = Observable.combineLatest(inputActive$, inputBaseline$)
+    ), undefined as Date | undefined)
+const active$: Observable<Date | undefined> = Observable.combineLatest(inputActive$, inputBaseline$)
     .withLatestFrom(baselineMode$)
     .scan((currentActive, [ [ inputActive, inputBaseline ], baselineMode ]) => (
         baselineMode
             ? inputBaseline && (inputBaseline > currentActive ? inputBaseline : currentActive)
             : inputActive
-    ), undefined as Date)
+    ), undefined as Date | undefined)
 const focus$ = Observable.merge(focusSubject, resetSubject.map(x => undefined)).startWith(undefined)
 
 //
@@ -174,15 +174,15 @@ const render = (state: State) => {
     baselineCheckboxSelection.property('checked', state.baselineMode);
 
     activeLineSelection
-        .attr('transform', state.active && `translate(${xScale(state.active)})`)
+        .attr('transform', state.active ? `translate(${xScale(state.active)})` : '')
         .style('display', state.active ? '' : 'none')
 
     baselineLineSelection
-        .attr('transform', state.baseline && `translate(${xScale(state.baseline)})`)
+        .attr('transform', state.baseline ? `translate(${xScale(state.baseline)})` : '')
         .style('display', state.baseline ? '' : 'none')
 
     focusLineSelection
-        .attr('transform', state.focus && `translate(${state.focus})`)
+        .attr('transform', state.focus ? `translate(${state.focus})` : '')
         .style('display', state.focus ? '' : 'none')
         .classed('baseline-mode', state.baselineMode)
 
@@ -201,9 +201,13 @@ const render = (state: State) => {
     activeSelection.text(`Active: ${state.active && state.active.getTime()}`)
     baselineSelection.text(`Baseline: ${state.baseline && state.baseline.getTime()}`)
 
-    focusedRevisionsSelection.html(getRevisionsFor(state.focus)
-        .map(revision => `<li>${JSON.stringify(revision, null, '\t')}</li>`)
-        .join(''))
+    // Control flow based analysis! focus is number | undefined, but number inside
+    // of the guard.
+    if (state.focus) {
+        focusedRevisionsSelection.html(getRevisionsFor(state.focus)
+            .map(revision => `<li>${JSON.stringify(revision, null, '\t')}</li>`)
+            .join(''))
+    }
 };
 
 state$.subscribe(render);
