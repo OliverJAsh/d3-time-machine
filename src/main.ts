@@ -236,7 +236,8 @@ const render = (state: State) => {
                             const date = xScale.invert(x);
                             headSubject.onNext(Option(date));
                         }
-                    }
+                    },
+                    onmouseleave: () => focusSubject.onNext(None)
                 }, [])
             ])
         ]),
