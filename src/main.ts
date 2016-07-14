@@ -183,9 +183,12 @@ const render = (state: State) => {
             svg('g', { transform: `translate(${margin.left},${margin.top})` }, [
                 svg('g', { class: 'x axis', transform: `translate(0,${height})` }, [ xAxisVNode ]),
                 svg('g', revisions.map(revision => (
-                    svg('circle', { class: 'dot', r: String(radius), cx: String(xScale(revision.createdAt)), cy: String(height / 2) }, [
-                        svg('title', [ String(revision.id) ])
-                    ])
+                    svg('circle', {
+                        class: 'dot',
+                        r: String(radius),
+                        cx: String(xScale(revision.createdAt)),
+                        cy: String(height / 2)
+                    }, [ svg('title', [ String(revision.id) ]) ])
                 ))),
                 createHeadLine(),
                 createBaseLine(),
