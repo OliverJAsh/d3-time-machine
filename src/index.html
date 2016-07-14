@@ -23,16 +23,13 @@
                 stroke: red;
             }
 
-            .head-line {
-                opacity: 0.5;
-            }
-
-            .focus-line.base-mode,
+            .focus-line.base-line,
             .base-line {
                 stroke: blue;
             }
 
-            .base-line {
+            .head-line:not(.focus-line),
+            .base-line:not(.focus-line) {
                 opacity: 0.5;
             }
 

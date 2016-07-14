@@ -121,21 +121,56 @@ const getRevisionsFor = (x: number): Revision[] => (
     })
 );
 
-const createVirtualLine = (classNames: string[], translateX: number, shouldHide: boolean): VNode => (
-    svg('line', {
-        class: classNames.join(' '),
-        attributes: { 'stroke-width': String(lineWidth) },
-        y1: 0,
-        y2: outerHeight - margin.bottom,
+const createVirtualMarker = (className: string, translateX: number, shouldHide: boolean, label: string, invertMarker: boolean): VNode => (
+    svg('g', {
         transform: `translate(${translateX})`,
         style: { display: shouldHide ? 'none' : '' }
-    }, [])
+    }, [
+        svg('text', {
+            attributes: {
+                'text-anchor': invertMarker ? 'end' : ''
+            },
+            x: ((lineWidth / 2) + 3) * (invertMarker ? -1 : 1),
+            y: 9,
+            style: {
+                textTransform: 'uppercase',
+                fontFamily: 'sans-serif',
+                fontSize: '11px'
+            }
+        }, label),
+        svg('line', {
+            y1: 0,
+            y2: outerHeight - margin.bottom,
+            class: className,
+            attributes: { 'stroke-width': String(lineWidth) }
+        }, [])
+    ])
 );
 
 const render = (state: State) => {
     console.log('render', state);
 
     const focusedRevisions = state.maybeFocus.map(getRevisionsFor).getOrElse([]);
+
+    const createHeadLine = (isFocusLine: boolean = false) => (
+        createVirtualMarker(
+            ['head-line', isFocusLine ? 'focus-line' : ''].filter(identity).join(' '),
+            isFocusLine ? state.maybeFocus.getOrElse(0) : state.maybeHead.map(d => xScale(d)).getOrElse(0),
+            isFocusLine ? state.maybeFocus.isEmpty : state.maybeHead.isEmpty,
+            'Head',
+            false
+        )
+    );
+
+    const createBaseLine = (isFocusLine: boolean = false) => (
+        createVirtualMarker(
+            ['base-line', isFocusLine ? 'focus-line' : ''].filter(identity).join(' '),
+            isFocusLine ? state.maybeFocus.getOrElse(0) : state.maybeBase.map(d => xScale(d)).getOrElse(0),
+            isFocusLine ? state.maybeFocus.isEmpty : state.maybeBase.isEmpty,
+            'Base',
+            true
+        )
+    );
 
     return h('div', [
         svg('svg', { width: outerWidth, height: outerHeight }, [
@@ -146,21 +181,9 @@ const render = (state: State) => {
                         svg('title', [ String(revision.id) ])
                     ])
                 ))),
-                createVirtualLine(
-                    ['active-line'],
-                    state.maybeHead.map(d => xScale(d)).getOrElse(0),
-                    state.maybeHead.isEmpty
-                ),
-                createVirtualLine(
-                    ['base-line'],
-                    state.maybeBase.map(d => xScale(d)).getOrElse(0),
-                    state.maybeBase.isEmpty
-                ),
-                createVirtualLine(
-                    ['focus-line', state.baseMode ? 'base-mode' : ''].filter(identity),
-                    state.maybeFocus.getOrElse(0),
-                    state.maybeFocus.isEmpty
-                ),
+                createHeadLine(),
+                createBaseLine(),
+                state.baseMode ? createBaseLine(true) : createHeadLine(true),
                 svg('rect', {
                     class: 'overlay',
                     width: String(outerWidth),
