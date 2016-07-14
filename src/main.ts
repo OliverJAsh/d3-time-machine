@@ -121,7 +121,7 @@ const getRevisionsFor = (x: number): Revision[] => (
     })
 );
 
-const createVirtualMarker = (className: string, translateX: number, shouldHide: boolean, label: string, invertMarker: boolean): VNode => (
+const createLine = (className: string, translateX: number, shouldHide: boolean, label: string, invertMarker: boolean): VNode => (
     svg('g', {
         transform: `translate(${translateX})`,
         style: { display: shouldHide ? 'none' : '' }
@@ -158,7 +158,7 @@ const render = (state: State) => {
     )).getOrElse([])
 
     const createHeadLine = (isFocusLine: boolean = false) => (
-        createVirtualMarker(
+        createLine(
             ['head-line', isFocusLine ? 'focus-line' : ''].filter(identity).join(' '),
             isFocusLine ? state.maybeFocus.getOrElse(0) : state.maybeHead.map(d => xScale(d)).getOrElse(0),
             isFocusLine ? state.maybeFocus.isEmpty : state.maybeHead.isEmpty,
@@ -168,7 +168,7 @@ const render = (state: State) => {
     );
 
     const createBaseLine = (isFocusLine: boolean = false) => (
-        createVirtualMarker(
+        createLine(
             ['base-line', isFocusLine ? 'focus-line' : ''].filter(identity).join(' '),
             isFocusLine ? state.maybeFocus.getOrElse(0) : state.maybeBase.map(d => xScale(d)).getOrElse(0),
             isFocusLine ? state.maybeFocus.isEmpty : state.maybeBase.isEmpty,
