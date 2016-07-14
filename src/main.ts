@@ -1,7 +1,12 @@
+// https://github.com/Matt-Esch/virtual-dom/pull/271
+
 import * as d3 from 'd3';
-import { range, inRange } from 'lodash';
+import { range, inRange, identity } from 'lodash';
 import { Subject, Observable } from 'rx-lite';
 import { Option, None } from './option';
+import { h, diff, patch, create, VNode } from 'virtual-dom';
+import svg = require('virtual-dom/virtual-hyperscript/svg');
+import virtualize = require('vdom-virtualize');
 
 interface Revision {
     id: number
@@ -73,8 +78,12 @@ const active$: Observable<Option<Date>> = Observable.combineLatest(inputActive$,
 const focus$: Observable<Option<number>> = Observable.merge(focusSubject, resetSubject.map(x => None))
     .startWith(None);
 
+const state$: Observable<State> = Observable.combineLatest(
+    baselineMode$, active$, baseline$, focus$,
+    (baselineMode, maybeActive, maybeBaseline, maybeFocus) => ({ baselineMode, maybeActive, maybeBaseline, maybeFocus }))
+
 //
-// Initial render
+// Rendering
 //
 
 const radius = 15;
@@ -93,80 +102,15 @@ const xAxis = d3.svg.axis()
     .ticks(d3.time.month)
     .tickFormat(d3.time.format('%m'));
 
-const bodySelection = d3.select('body')
-const mainGroupSelection = bodySelection
-    .append('svg')
-    .attr('width', outerWidth)
-    .attr('height', outerHeight)
-    .append('g')
-    .attr('transform', `translate(${margin.left},${margin.top})`);
-
-mainGroupSelection.append('g')
-    .attr('class', 'x axis')
-    .attr('transform', `translate(0,${height})`)
-    .call(xAxis);
-
-// Circles
-mainGroupSelection.append('g')
-    .selectAll('.dot')
-    .data(revisions)
-    .enter()
-    .append('circle')
-    .attr('class', 'dot')
-    .attr('r', radius)
-    .attr('cx', d => xScale(d.createdAt))
-    .attr('cy', height / 2)
-    .append('title')
-    .text(d => d.id)
+const svgns = "http://www.w3.org/2000/svg";
+const d3AxisToElement = (d3Axis: d3.svg.Axis): Element => (
+    <Element>d3.select(document.createElementNS(svgns, 'svg'))
+        .call(xAxis)
+        .node()
+);
+const xAxisVNode = virtualize(d3AxisToElement(xAxis));
 
 const lineWidth = 3;
-const createLine = (): d3.Selection<any> => (
-    mainGroupSelection.append('line')
-        .attr('stroke-width', lineWidth)
-        .attr('y1', 0)
-        .attr('y2', outerHeight - margin.bottom)
-);
-
-const activeLineSelection = createLine().attr('class', 'active-line');
-const baselineLineSelection = createLine().attr('class', 'baseline-line');
-const focusLineSelection = createLine().attr('class', 'focus-line');
-
-const interactionRectSelection = mainGroupSelection
-    .append('rect');
-
-const interactionRectEl = interactionRectSelection.node();
-interactionRectSelection
-    .classed('overlay', true)
-    .attr('width', outerWidth)
-    .attr('height', outerHeight)
-    .on('mousemove', () => {
-        const [x] = d3.mouse(interactionRectEl);
-        focusSubject.onNext(Option(x))
-    })
-
-const toolbarSelection = bodySelection.append('div');
-
-toolbarSelection.append('button')
-    .text('Reset')
-    .on('click', () => resetSubject.onNext(true))
-
-const baselineCheckboxLabelSelection = toolbarSelection.append('label')
-baselineCheckboxLabelSelection.append('span').text('Select baseline');
-const baselineCheckboxSelection = baselineCheckboxLabelSelection
-    .append('input')
-
-baselineCheckboxSelection
-    .attr('type', 'checkbox')
-    .on('change', () => baselineModeSubject.onNext(baselineCheckboxSelection.property('checked')))
-
-const activeSelection = bodySelection.append('p')
-const baselineSelection = bodySelection.append('p')
-const focusedRevisionsSelection = bodySelection.append('ul')
-
-const state$: Observable<State> = Observable.combineLatest(
-    baselineMode$, active$, baseline$, focus$,
-    (baselineMode, maybeActive, maybeBaseline, maybeFocus) => ({ baselineMode, maybeActive, maybeBaseline, maybeFocus }))
-
 const getRevisionsFor = (x: number): Revision[] => (
     revisions.filter(d => {
         const x2 = xScale(d.createdAt);
@@ -177,45 +121,96 @@ const getRevisionsFor = (x: number): Revision[] => (
     })
 );
 
+const createVirtualLine = (classNames: string[], translateX: number, shouldHide: boolean): VNode => (
+    svg('line', {
+        class: classNames.join(' '),
+        attributes: { 'stroke-width': String(lineWidth) },
+        y1: 0,
+        y2: outerHeight - margin.bottom,
+        transform: `translate(${translateX})`,
+        style: { display: shouldHide ? 'none' : '' }
+    }, [])
+);
+
 const render = (state: State) => {
     console.log('render', state);
 
-    baselineCheckboxSelection.property('checked', state.baselineMode);
-
-    activeLineSelection
-        .attr('transform', state.maybeActive.map(active => `translate(${xScale(active)})`).getOrElse(''))
-        .style('display', state.maybeActive.isEmpty ? 'none' : '')
-
-    baselineLineSelection
-        .attr('transform', state.maybeBaseline.map(baseline => `translate(${xScale(baseline)})`).getOrElse(''))
-        .style('display', state.maybeBaseline.isEmpty ? 'none' : '')
-
-    focusLineSelection
-        .attr('transform', state.maybeFocus.map(focus => `translate(${focus})`).getOrElse(''))
-        .style('display', state.maybeFocus.isEmpty ? 'none' : '')
-        .classed('baseline-mode', state.baselineMode)
-
-    interactionRectSelection.on('click', () => {
-        if (state.baselineMode) {
-            const [x] = d3.mouse(interactionRectEl);
-            const date = xScale.invert(x);
-            baselineSubject.onNext(Option(date));
-        } else {
-            const [x] = d3.mouse(interactionRectEl);
-            const date = xScale.invert(x);
-            activeSubject.onNext(Option(date));
-        }
-    });
-
-    activeSelection.text(`Active: ${state.maybeActive
-        .map(active => String(active.getTime())).getOrElse('')}`)
-    baselineSelection.text(`Baseline: ${state.maybeBaseline
-        .map(baseline => String(baseline.getTime())).getOrElse('')}`)
-
     const focusedRevisions = state.maybeFocus.map(getRevisionsFor).getOrElse([]);
-    focusedRevisionsSelection.html(focusedRevisions
-        .map(revision => `<li>${JSON.stringify(revision, null, '\t')}</li>`)
-        .join(''))
+
+    return h('div', [
+        svg('svg', { width: outerWidth, height: outerHeight }, [
+            svg('g', { transform: `translate(${margin.left},${margin.top})` }, [
+                svg('g', { class: 'x axis', transform: `translate(0,${height})` }, [ xAxisVNode ]),
+                svg('g', revisions.map(revision => (
+                    svg('circle', { class: 'dot', r: String(radius), cx: String(xScale(revision.createdAt)), cy: String(height / 2) }, [
+                        svg('title', [ String(revision.id) ])
+                    ])
+                ))),
+                createVirtualLine(
+                    ['active-line'],
+                    state.maybeActive.map(d => xScale(d)).getOrElse(0),
+                    state.maybeActive.isEmpty
+                ),
+                createVirtualLine(
+                    ['baseline-line'],
+                    state.maybeBaseline.map(d => xScale(d)).getOrElse(0),
+                    state.maybeBaseline.isEmpty
+                ),
+                createVirtualLine(
+                    ['focus-line', state.baselineMode ? 'baseline-mode' : ''].filter(identity),
+                    state.maybeFocus.getOrElse(0),
+                    state.maybeFocus.isEmpty
+                ),
+                svg('rect', {
+                    class: 'overlay',
+                    width: String(outerWidth),
+                    height: String(outerHeight),
+                    onmousemove: (event: MouseEvent) => {
+                        const x = event.offsetX;
+                        focusSubject.onNext(Option(x))
+                    },
+                    onclick: (event: MouseEvent) => {
+                        if (state.baselineMode) {
+                            const x = event.offsetX;
+                            const date = xScale.invert(x);
+                            baselineSubject.onNext(Option(date));
+                        } else {
+                            const x = event.offsetX;
+                            const date = xScale.invert(x);
+                            activeSubject.onNext(Option(date));
+                        }
+                    }
+                }, [])
+            ])
+        ]),
+        h('div', [
+            h('button', { onclick: (event: MouseEvent) => resetSubject.onNext(true) }, [ 'Reset' ]),
+            h('label', [
+                h('input', {
+                    onchange: (event: Event) => baselineModeSubject.onNext((event.target as HTMLInputElement).checked),
+                    type: 'checkbox',
+                    checked: state.baselineMode
+                }, []),
+                'Select baseline'
+            ])
+        ]),
+        h('div', [
+            h('p', `Active: ${state.maybeActive.map(active => String(active.getTime())).getOrElse('')}`),
+            h('p', `Baseline: ${state.maybeBaseline.map(baseline => String(baseline.getTime())).getOrElse('')}`),
+            h('ul', focusedRevisions.map(revision => h('li', JSON.stringify(revision, null, '\t'))))
+        ])
+    ]);
 };
 
-state$.subscribe(render);
+let tree: VNode, rootNode: Element;
+state$
+    .map(render)
+    .subscribe(newTree => {
+        if (!rootNode) {
+            rootNode = create(newTree);
+            document.body.appendChild(rootNode);
+        }
+        const patches = diff(tree || newTree, newTree);
+        rootNode = patch(rootNode, patches);
+        tree = newTree;
+    });
