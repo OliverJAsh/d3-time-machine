@@ -94,20 +94,20 @@ const xAxis = d3.svg.axis()
     .tickFormat(d3.time.format('%m'));
 
 const bodySelection = d3.select('body')
-const svgSelection = bodySelection
+const mainGroupSelection = bodySelection
     .append('svg')
     .attr('width', outerWidth)
     .attr('height', outerHeight)
     .append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`);
 
-svgSelection.append('g')
+mainGroupSelection.append('g')
     .attr('class', 'x axis')
     .attr('transform', `translate(0,${height})`)
     .call(xAxis);
 
 // Circles
-svgSelection.append('g')
+mainGroupSelection.append('g')
     .selectAll('.dot')
     .data(revisions)
     .enter()
@@ -121,7 +121,7 @@ svgSelection.append('g')
 
 const lineWidth = 3;
 const createLine = (): d3.Selection<any> => (
-    svgSelection.append('line')
+    mainGroupSelection.append('line')
         .attr('stroke-width', lineWidth)
         .attr('y1', 0)
         .attr('y2', outerHeight - margin.bottom)
@@ -131,7 +131,7 @@ const activeLineSelection = createLine().attr('class', 'active-line');
 const baselineLineSelection = createLine().attr('class', 'baseline-line');
 const focusLineSelection = createLine().attr('class', 'focus-line');
 
-const interactionRectSelection = svgSelection
+const interactionRectSelection = mainGroupSelection
     .append('rect');
 
 const interactionRectEl = interactionRectSelection.node();
