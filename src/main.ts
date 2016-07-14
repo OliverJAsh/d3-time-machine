@@ -151,6 +151,11 @@ const render = (state: State) => {
     console.log('render', state);
 
     const focusedRevisions = state.maybeFocus.map(getRevisionsFor).getOrElse([]);
+    const selectedRevisions = state.maybeBase.flatMap(base => (
+        state.maybeHead.map(head => (
+            revisions.filter(d => d.createdAt > base && d.createdAt < head)
+        ))
+    )).getOrElse([])
 
     const createHeadLine = (isFocusLine: boolean = false) => (
         createVirtualMarker(
@@ -221,7 +226,10 @@ const render = (state: State) => {
         h('div', [
             h('p', `Version of dataset (head): ${state.maybeHead.map(head => String(head.getTime())).getOrElse('')}`),
             h('p', `Show changes since (base): ${state.maybeBase.map(base => String(base.getTime())).getOrElse('')}`),
-            h('ul', focusedRevisions.map(revision => h('li', JSON.stringify(revision, null, '\t'))))
+            h('h2', 'Selected revisions'),
+            h('ul', selectedRevisions.map(revision => h('li', JSON.stringify(revision, null, '\t')))),
+            h('h2', 'Focused revisions'),
+            h('ul', focusedRevisions.map(revision => h('li', JSON.stringify(revision, null, '\t')))),
         ])
     ]);
 };
