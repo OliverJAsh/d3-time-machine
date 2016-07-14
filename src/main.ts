@@ -186,12 +186,34 @@ const render = (state: State) => {
         }, [ svg('title', [ String(revision.id) ]) ])
     );
 
+    const createMasks = (): VNode => (
+        svg('g', state.maybeBase.flatMap(base => (
+            state.maybeHead.map(head => (
+                [
+                    svg('rect', {
+                        class: 'mask',
+                        x: margin.left * -1,
+                        width: xScale(base) + margin.left,
+                        height: outerHeight - margin.bottom
+                    }, []),
+                    svg('rect', {
+                        class: 'mask',
+                        x: xScale(head),
+                        width: width - xScale(head) + margin.right,
+                        height: outerHeight - margin.bottom
+                    }, [])
+                ]
+            ))
+        )).getOrElse([]))
+    );
+
     return h('div', [
         h('h1', 'Tardis'),
         svg('svg', { width: outerWidth, height: outerHeight }, [
             svg('g', { transform: `translate(${margin.left},${margin.top})` }, [
                 svg('g', { class: 'x axis', transform: `translate(0,${height})` }, [ xAxisVNode ]),
                 svg('g', revisions.map(createRevision)),
+                createMasks(),
                 createHeadLine(),
                 createBaseLine(),
                 state.baseMode ? createBaseLine(true) : createHeadLine(true),
