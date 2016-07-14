@@ -177,19 +177,21 @@ const render = (state: State) => {
         )
     );
 
+    const createRevision = (revision: Revision): VNode => (
+        svg('circle', {
+            class: 'dot',
+            r: String(radius),
+            cx: String(xScale(revision.createdAt)),
+            cy: String(height / 2)
+        }, [ svg('title', [ String(revision.id) ]) ])
+    );
+
     return h('div', [
         h('h1', 'Tardis'),
         svg('svg', { width: outerWidth, height: outerHeight }, [
             svg('g', { transform: `translate(${margin.left},${margin.top})` }, [
                 svg('g', { class: 'x axis', transform: `translate(0,${height})` }, [ xAxisVNode ]),
-                svg('g', revisions.map(revision => (
-                    svg('circle', {
-                        class: 'dot',
-                        r: String(radius),
-                        cx: String(xScale(revision.createdAt)),
-                        cy: String(height / 2)
-                    }, [ svg('title', [ String(revision.id) ]) ])
-                ))),
+                svg('g', revisions.map(createRevision)),
                 createHeadLine(),
                 createBaseLine(),
                 state.baseMode ? createBaseLine(true) : createHeadLine(true),
