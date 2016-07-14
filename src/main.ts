@@ -16,9 +16,9 @@ interface Revision {
 }
 
 interface State {
-    baselineMode: boolean
-    maybeActive: Option<Date>
-    maybeBaseline: Option<Date>
+    baseMode: boolean
+    maybeHead: Option<Date>
+    maybeBase: Option<Date>
     maybeFocus: Option<number>
 }
 
@@ -38,49 +38,49 @@ console.log(JSON.stringify(revisions, null, '\t'));
 //
 
 const resetSubject = new Subject<boolean>()
-const baselineModeSubject = new Subject<boolean>()
-const baselineSubject = new Subject<Option<Date>>()
-const activeSubject = new Subject<Option<Date>>()
+const baseModeSubject = new Subject<boolean>()
+const baseSubject = new Subject<Option<Date>>()
+const headSubject = new Subject<Option<Date>>()
 const focusSubject = new Subject<Option<number>>()
 
-const inputActive$: Observable<Option<Date>> = Observable.merge(activeSubject, resetSubject.map(x => None))
+const inputHead$: Observable<Option<Date>> = Observable.merge(headSubject, resetSubject.map(x => None))
     .startWith(None)
-const inputBaseline$: Observable<Option<Date>> = Observable.merge(
-    baselineSubject,
+const inputBase$: Observable<Option<Date>> = Observable.merge(
+    baseSubject,
     resetSubject.map(x => None)
 )
     .startWith(None);
-const baselineMode$: Observable<boolean> = Observable.merge(
-    baselineModeSubject,
+const baseMode$: Observable<boolean> = Observable.merge(
+    baseModeSubject,
     resetSubject.map(x => false),
-    inputBaseline$.map(x => false)
+    inputBase$.map(x => false)
 )
     .startWith(false);
 
-const baseline$: Observable<Option<Date>> = Observable.combineLatest(inputBaseline$, inputActive$)
-    .withLatestFrom(baselineMode$)
-    .scan((maybeCurrentBaseline, [ [ maybeInputBaseline, maybeInputActive ], baselineMode ]) => (
-        baselineMode
-            ? maybeInputBaseline
-            : maybeCurrentBaseline.flatMap(currentBaseline => (
-                maybeInputActive.map(inputActive => inputActive < currentBaseline ? inputActive : currentBaseline)
+const base$: Observable<Option<Date>> = Observable.combineLatest(inputBase$, inputHead$)
+    .withLatestFrom(baseMode$)
+    .scan((maybeCurrentBase, [ [ maybeInputBase, maybeInputHead ], baseMode ]) => (
+        baseMode
+            ? maybeInputBase
+            : maybeCurrentBase.flatMap(currentBase => (
+                maybeInputHead.map(inputHead => inputHead < currentBase ? inputHead : currentBase)
             ))
     ), None as Option<Date>)
-const active$: Observable<Option<Date>> = Observable.combineLatest(inputActive$, inputBaseline$)
-    .withLatestFrom(baselineMode$)
-    .scan((maybeCurrentActive, [ [ maybeInputActive, maybeInputBaseline ], baselineMode ]) => (
-        baselineMode
-            ? maybeCurrentActive.flatMap(currentActive => (
-                maybeInputBaseline.map(inputBaseline => inputBaseline > currentActive ? inputBaseline : currentActive)
+const head$: Observable<Option<Date>> = Observable.combineLatest(inputHead$, inputBase$)
+    .withLatestFrom(baseMode$)
+    .scan((maybeCurrentHead, [ [ maybeInputHead, maybeInputBase ], baseMode ]) => (
+        baseMode
+            ? maybeCurrentHead.flatMap(currentHead => (
+                maybeInputBase.map(inputBase => inputBase > currentHead ? inputBase : currentHead)
             ))
-            : maybeInputActive
+            : maybeInputHead
     ), None as Option<Date>)
 const focus$: Observable<Option<number>> = Observable.merge(focusSubject, resetSubject.map(x => None))
     .startWith(None);
 
 const state$: Observable<State> = Observable.combineLatest(
-    baselineMode$, active$, baseline$, focus$,
-    (baselineMode, maybeActive, maybeBaseline, maybeFocus) => ({ baselineMode, maybeActive, maybeBaseline, maybeFocus }))
+    baseMode$, head$, base$, focus$,
+    (baseMode, maybeHead, maybeBase, maybeFocus) => ({ baseMode, maybeHead, maybeBase, maybeFocus }))
 
 //
 // Rendering
@@ -148,16 +148,16 @@ const render = (state: State) => {
                 ))),
                 createVirtualLine(
                     ['active-line'],
-                    state.maybeActive.map(d => xScale(d)).getOrElse(0),
-                    state.maybeActive.isEmpty
+                    state.maybeHead.map(d => xScale(d)).getOrElse(0),
+                    state.maybeHead.isEmpty
                 ),
                 createVirtualLine(
-                    ['baseline-line'],
-                    state.maybeBaseline.map(d => xScale(d)).getOrElse(0),
-                    state.maybeBaseline.isEmpty
+                    ['base-line'],
+                    state.maybeBase.map(d => xScale(d)).getOrElse(0),
+                    state.maybeBase.isEmpty
                 ),
                 createVirtualLine(
-                    ['focus-line', state.baselineMode ? 'baseline-mode' : ''].filter(identity),
+                    ['focus-line', state.baseMode ? 'base-mode' : ''].filter(identity),
                     state.maybeFocus.getOrElse(0),
                     state.maybeFocus.isEmpty
                 ),
@@ -170,14 +170,14 @@ const render = (state: State) => {
                         focusSubject.onNext(Option(x))
                     },
                     onclick: (event: MouseEvent) => {
-                        if (state.baselineMode) {
+                        if (state.baseMode) {
                             const x = event.offsetX;
                             const date = xScale.invert(x);
-                            baselineSubject.onNext(Option(date));
+                            baseSubject.onNext(Option(date));
                         } else {
                             const x = event.offsetX;
                             const date = xScale.invert(x);
-                            activeSubject.onNext(Option(date));
+                            headSubject.onNext(Option(date));
                         }
                     }
                 }, [])
@@ -187,16 +187,16 @@ const render = (state: State) => {
             h('button', { onclick: (event: MouseEvent) => resetSubject.onNext(true) }, [ 'Reset' ]),
             h('label', [
                 h('input', {
-                    onchange: (event: Event) => baselineModeSubject.onNext((event.target as HTMLInputElement).checked),
+                    onchange: (event: Event) => baseModeSubject.onNext((event.target as HTMLInputElement).checked),
                     type: 'checkbox',
-                    checked: state.baselineMode
+                    checked: state.baseMode
                 }, []),
-                'Select baseline'
+                'Select base'
             ])
         ]),
         h('div', [
-            h('p', `Active: ${state.maybeActive.map(active => String(active.getTime())).getOrElse('')}`),
-            h('p', `Baseline: ${state.maybeBaseline.map(baseline => String(baseline.getTime())).getOrElse('')}`),
+            h('p', `Head: ${state.maybeHead.map(head => String(head.getTime())).getOrElse('')}`),
+            h('p', `Base: ${state.maybeBase.map(base => String(base.getTime())).getOrElse('')}`),
             h('ul', focusedRevisions.map(revision => h('li', JSON.stringify(revision, null, '\t'))))
         ])
     ]);
