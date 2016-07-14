@@ -120,6 +120,9 @@ const getRevisionsFor = (x: number): Revision[] => (
             || inRange(x + (lineWidth / 2), xLowerBound, xUpperBound);
     })
 );
+const getRevisionsBetween = (base: Date, head: Date): Revision[] => {
+    return revisions.filter(d => d.createdAt > base && d.createdAt < head)
+};
 
 const createLine = (className: string, translateX: number, shouldHide: boolean, label: string, invertMarker: boolean): VNode => (
     svg('g', {
@@ -151,11 +154,9 @@ const render = (state: State) => {
     console.log('render', state);
 
     const focusedRevisions = state.maybeFocus.map(getRevisionsFor).getOrElse([]);
-    const selectedRevisions = state.maybeBase.flatMap(base => (
-        state.maybeHead.map(head => (
-            revisions.filter(d => d.createdAt > base && d.createdAt < head)
-        ))
-    )).getOrElse([])
+    const selectedRevisions = state.maybeBase
+        .flatMap(base => state.maybeHead.map(head => getRevisionsBetween(base, head)))
+        .getOrElse([])
 
     const createHeadLine = (isFocusLine: boolean = false) => (
         createLine(
