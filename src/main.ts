@@ -173,6 +173,7 @@ const render = (state: State) => {
     );
 
     return h('div', [
+        h('h1', 'Tardis'),
         svg('svg', { width: outerWidth, height: outerHeight }, [
             svg('g', { transform: `translate(${margin.left},${margin.top})` }, [
                 svg('g', { class: 'x axis', transform: `translate(0,${height})` }, [ xAxisVNode ]),
