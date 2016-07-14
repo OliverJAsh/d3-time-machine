@@ -218,8 +218,8 @@ const render = (state: State) => {
             ])
         ]),
         h('div', [
-            h('p', `Head: ${state.maybeHead.map(head => String(head.getTime())).getOrElse('')}`),
-            h('p', `Base: ${state.maybeBase.map(base => String(base.getTime())).getOrElse('')}`),
+            h('p', `Version of dataset (head): ${state.maybeHead.map(head => String(head.getTime())).getOrElse('')}`),
+            h('p', `Show changes since (base): ${state.maybeBase.map(base => String(base.getTime())).getOrElse('')}`),
             h('ul', focusedRevisions.map(revision => h('li', JSON.stringify(revision, null, '\t'))))
         ])
     ]);
