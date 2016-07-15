@@ -16,6 +16,7 @@ interface Revision {
 }
 
 interface State {
+    revisions: Revision[]
     baseMode: boolean
     maybeHead: Option<Date>
     maybeBase: Option<Date>
@@ -24,14 +25,16 @@ interface State {
 
 const rint = (n: number) => (Math.random() * (n + 1)) | 0;
 const rdate = (): Date => new Date(2016, rint(11), rint(28), rint(23));
-const revisions: Revision[] = range(0, 30).map((x, id) => ({
-    id,
-    datasetSlug: 'fraud',
-    createdAt: rdate(),
-    authorName: 'Bob'
-}))
-
-console.log(JSON.stringify(revisions, null, '\t'));
+const revisions$: Observable<Revision[]> = Observable.timer(2000).map(x => (
+    range(0, 30).map((x, id) => ({
+        id,
+        datasetSlug: 'fraud',
+        createdAt: rdate(),
+        authorName: 'Bob'
+    }))
+))
+    .startWith([])
+    .do(revisions => console.log(JSON.stringify(revisions, null, '\t')));
 
 //
 // Observables and subjects
@@ -79,8 +82,8 @@ const focus$: Observable<Option<number>> = Observable.merge(focusSubject, resetS
     .startWith(None);
 
 const state$: Observable<State> = Observable.combineLatest(
-    baseMode$, head$, base$, focus$,
-    (baseMode, maybeHead, maybeBase, maybeFocus) => ({ baseMode, maybeHead, maybeBase, maybeFocus }))
+    revisions$, baseMode$, head$, base$, focus$,
+    (revisions, baseMode, maybeHead, maybeBase, maybeFocus) => ({ revisions, baseMode, maybeHead, maybeBase, maybeFocus }))
 
 //
 // Rendering
@@ -93,36 +96,7 @@ const outerHeight = 100;
 const width = outerWidth - margin.left - margin.right;
 const height = outerHeight - margin.top - margin.bottom;
 
-const xScale = d3.time.scale()
-    .domain(d3.extent(revisions.map(d => d.createdAt.getTime())))
-    .range([0, width]);
-
-const xAxis = d3.svg.axis()
-    .scale(xScale)
-    .ticks(d3.time.month)
-    .tickFormat(d3.time.format('%m'));
-
-const svgns = "http://www.w3.org/2000/svg";
-const d3AxisToElement = (d3Axis: d3.svg.Axis): Element => (
-    <Element>d3.select(document.createElementNS(svgns, 'svg'))
-        .call(d3Axis)
-        .node()
-);
-const xAxisVNode = virtualize(d3AxisToElement(xAxis));
-
 const lineWidth = 3;
-const getRevisionsFor = (x: number): Revision[] => (
-    revisions.filter(d => {
-        const x2 = xScale(d.createdAt);
-        const xLowerBound = x2 - radius;
-        const xUpperBound = x2 + radius;
-        return inRange(x - (lineWidth / 2), xLowerBound, xUpperBound)
-            || inRange(x + (lineWidth / 2), xLowerBound, xUpperBound);
-    })
-);
-const getRevisionsBetween = (base: Date, head: Date): Revision[] => {
-    return revisions.filter(d => d.createdAt > base && d.createdAt < head)
-};
 
 const createLine = (className: string, translateX: number, shouldHide: boolean, label: string, invertMarker: boolean): VNode => (
     svg('g', {
@@ -150,8 +124,40 @@ const createLine = (className: string, translateX: number, shouldHide: boolean, 
     ])
 );
 
+const svgns = "http://www.w3.org/2000/svg";
+const d3AxisToElement = (d3Axis: d3.svg.Axis): Element => (
+    <Element>d3.select(document.createElementNS(svgns, 'svg'))
+        .call(d3Axis)
+        .node()
+);
+
 const render = (state: State) => {
     console.log('render', state);
+
+    const xScale = d3.time.scale()
+        .domain(d3.extent(state.revisions.map(d => d.createdAt.getTime())))
+        .range([0, width]);
+
+    const xAxis = d3.svg.axis()
+        .scale(xScale)
+        .ticks(d3.time.month)
+        .tickFormat(d3.time.format('%m'));
+
+    const xAxisVNode = virtualize(d3AxisToElement(xAxis));
+
+
+    const getRevisionsFor = (x: number): Revision[] => (
+        state.revisions.filter(d => {
+            const x2 = xScale(d.createdAt);
+            const xLowerBound = x2 - radius;
+            const xUpperBound = x2 + radius;
+            return inRange(x - (lineWidth / 2), xLowerBound, xUpperBound)
+                || inRange(x + (lineWidth / 2), xLowerBound, xUpperBound);
+        })
+    );
+    const getRevisionsBetween = (base: Date, head: Date): Revision[] => {
+        return state.revisions.filter(d => d.createdAt > base && d.createdAt < head)
+    };
 
     const focusedRevisions = state.maybeFocus.map(getRevisionsFor).getOrElse([]);
     const selectedRevisions = state.maybeBase
@@ -213,7 +219,7 @@ const render = (state: State) => {
         svg('svg', { width: outerWidth, height: outerHeight }, [
             svg('g', { transform: `translate(${margin.left},${margin.top})` }, [
                 svg('g', { class: 'x axis', transform: `translate(0,${height})` }, [ xAxisVNode ]),
-                svg('g', revisions.map(createRevision)),
+                svg('g', state.revisions.map(createRevision)),
                 createMasks(),
                 createHeadLine(),
                 createBaseLine(),

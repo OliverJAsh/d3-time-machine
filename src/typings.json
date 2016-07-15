@@ -7,6 +7,7 @@
     "node": "registry:env/node#6.0.0+20160622202520",
     "rx-lite": "registry:dt/rx-lite#0.0.0+20160628114230",
     "rx.lite": "registry:dt/rx.lite#0.0.0+20160316155526",
+    "rx.time-lite": "registry:dt/rx.time-lite#0.0.0+20160316171810",
     "virtual-dom": "registry:dt/virtual-dom#2.0.1+20160317120654"
   }
 }
