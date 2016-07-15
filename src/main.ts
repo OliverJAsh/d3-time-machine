@@ -139,8 +139,6 @@ const render = (state: State) => {
 
     const xAxis = d3.svg.axis()
         .scale(xScale)
-        .ticks(d3.time.month)
-        .tickFormat(d3.time.format('%m'));
 
     const xAxisVNode = virtualize(d3AxisToElement(xAxis));
 
