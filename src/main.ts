@@ -263,15 +263,19 @@ const render = (state: State) => {
     ]);
 };
 
-let tree: VNode, rootNode: Element;
+const renderVNodeToDom = (containerNode: Element) => {
+    let currentVNode: VNode, rootNode: Element;
+    return (newVNode: VNode) => {
+        if (!rootNode) {
+            rootNode = create(newVNode);
+            containerNode.appendChild(rootNode);
+        }
+        const patches = diff(currentVNode || newVNode, newVNode);
+        rootNode = patch(rootNode, patches);
+        currentVNode = newVNode;
+    };
+};
+
 state$
     .map(render)
-    .subscribe(newTree => {
-        if (!rootNode) {
-            rootNode = create(newTree);
-            document.body.appendChild(rootNode);
-        }
-        const patches = diff(tree || newTree, newTree);
-        rootNode = patch(rootNode, patches);
-        tree = newTree;
-    });
+    .subscribe(renderVNodeToDom(document.body));
