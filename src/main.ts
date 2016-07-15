@@ -105,7 +105,7 @@ const xAxis = d3.svg.axis()
 const svgns = "http://www.w3.org/2000/svg";
 const d3AxisToElement = (d3Axis: d3.svg.Axis): Element => (
     <Element>d3.select(document.createElementNS(svgns, 'svg'))
-        .call(xAxis)
+        .call(d3Axis)
         .node()
 );
 const xAxisVNode = virtualize(d3AxisToElement(xAxis));
