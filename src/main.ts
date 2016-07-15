@@ -15,12 +15,17 @@ interface Revision {
     authorName: string
 }
 
+type Focus = { offsetY: number, offsetX: number };
+
 interface State {
     revisions: Revision[]
     baseMode: boolean
     maybeHead: Option<Date>
     maybeBase: Option<Date>
-    maybeFocus: Option<number>
+    maybeFocus: Option<Focus>
+    maybeDebouncedFocus: Option<Focus>
+    xScale: d3.time.Scale<number, number>
+    maybeFocusedRevisions: Option<Revision[]>
 }
 
 const rint = (n: number) => (Math.random() * (n + 1)) | 0;
@@ -35,6 +40,14 @@ const revisions$: Observable<Revision[]> = Observable.timer(2000).map(x => (
 ))
     .startWith([])
 
+const radius = 15;
+const margin = {top: 0, right: radius, bottom: 30, left: radius};
+const outerWidth = 700;
+const outerHeight = 100;
+const width = outerWidth - margin.left - margin.right;
+const height = outerHeight - margin.top - margin.bottom;
+const lineWidth = 3;
+
 //
 // Observables and subjects
 //
@@ -43,7 +56,8 @@ const resetSubject = new Subject<boolean>()
 const baseModeSubject = new Subject<boolean>()
 const baseSubject = new Subject<Option<Date>>()
 const headSubject = new Subject<Option<Date>>()
-const focusSubject = new Subject<Option<number>>()
+const focusSubject = new Subject<Option<Focus>>()
+const focusedRevisionsHoverSubject = new Subject<boolean>()
 
 const inputHead$: Observable<Option<Date>> = Observable.merge(headSubject, resetSubject.map(x => None))
     .startWith(None)
@@ -77,25 +91,53 @@ const head$: Observable<Option<Date>> = Observable.combineLatest(inputHead$, inp
             ))
             : maybeInputHead
     ), None as Option<Date>)
-const focus$: Observable<Option<number>> = Observable.merge(focusSubject, resetSubject.map(x => None))
-    .startWith(None);
+const focus$: Observable<Option<Focus>> = focusSubject.startWith(None);
+const focusedRevisionsHover$: Observable<boolean> = focusedRevisionsHoverSubject.startWith(false);
 
+const createXScale = (revisions: Revision[]): d3.time.Scale<number, number> => (
+    d3.time.scale()
+        .domain(d3.extent(revisions.map(d => d.createdAt.getTime())))
+        .range([0, width])
+)
+const initialState = {
+    revisions: [] as Revision[],
+    baseMode: false,
+    maybeHead: None,
+    maybeBase: None,
+    maybeFocus: None,
+    maybeDebouncedFocus: None,
+    xScale: createXScale([]),
+    maybeFocusedRevisions: None,
+};
 const state$: Observable<State> = Observable.combineLatest(
-    revisions$, baseMode$, head$, base$, focus$,
-    (revisions, baseMode, maybeHead, maybeBase, maybeFocus) => ({ revisions, baseMode, maybeHead, maybeBase, maybeFocus }))
+    revisions$, baseMode$, head$, base$, focus$, focus$.debounce(300), focusedRevisionsHover$
+).scan((previousState, [ revisions, baseMode, maybeHead, maybeBase, maybeFocus, maybeDebouncedFocus, focusedRevisionsHover ]) => {
+    const xScale = createXScale(revisions);
+    const getRevisionsFor = (x: number): Revision[] => (
+        revisions.filter(revision => {
+            const x2 = xScale(revision.createdAt);
+            const xLowerBound = x2 - radius;
+            const xUpperBound = x2 + radius;
+            const isRevisionInBounds = inRange(x - (lineWidth / 2), xLowerBound, xUpperBound)
+                || inRange(x + (lineWidth / 2), xLowerBound, xUpperBound);
+            return isRevisionInBounds;
+        })
+    );
+    const maybeFocusedRevisions = focusedRevisionsHover
+        ? previousState.maybeFocusedRevisions
+        : maybeDebouncedFocus
+            .map(focus => getRevisionsFor(focus.offsetX))
+            .filter(revisions => revisions.length > 0);
+    return {
+        revisions, baseMode, maybeHead, maybeBase, maybeFocus,
+        maybeDebouncedFocus: focusedRevisionsHover ? previousState.maybeDebouncedFocus : maybeDebouncedFocus,
+        xScale, maybeFocusedRevisions
+    };
+}, initialState)
 
 //
 // Rendering
 //
-
-const radius = 15;
-const margin = {top: 0, right: radius, bottom: 30, left: radius};
-const outerWidth = 700;
-const outerHeight = 100;
-const width = outerWidth - margin.left - margin.right;
-const height = outerHeight - margin.top - margin.bottom;
-
-const lineWidth = 3;
 
 const createLine = (className: string, translateX: number, shouldHide: boolean, label: string, invertMarker: boolean): VNode => (
     svg('g', {
@@ -130,52 +172,27 @@ const d3AxisToElement = (d3Axis: d3.svg.Axis): Element => (
         .node()
 );
 
-const render = (state: State) => {
-    console.log('render', state);
+const render = ({ revisions, baseMode, maybeHead, maybeBase, maybeFocus, maybeDebouncedFocus, xScale, maybeFocusedRevisions }: State) => {
+    console.log('render');
 
-    const xScale = d3.time.scale()
-        .domain(d3.extent(state.revisions.map(d => d.createdAt.getTime())))
-        .range([0, width]);
-
-    const xAxis = d3.svg.axis()
-        .scale(xScale)
-
+    const xAxis = d3.svg.axis().scale(xScale)
     const xAxisVNode = virtualize(d3AxisToElement(xAxis));
 
-
-    const getRevisionsFor = (x: number): Revision[] => (
-        state.revisions.filter(d => {
-            const x2 = xScale(d.createdAt);
-            const xLowerBound = x2 - radius;
-            const xUpperBound = x2 + radius;
-            return inRange(x - (lineWidth / 2), xLowerBound, xUpperBound)
-                || inRange(x + (lineWidth / 2), xLowerBound, xUpperBound);
-        })
-    );
-    const getRevisionsBetween = (base: Date, head: Date): Revision[] => {
-        return state.revisions.filter(d => d.createdAt > base && d.createdAt < head)
-    };
-
-    const focusedRevisions = state.maybeFocus.map(getRevisionsFor).getOrElse([]);
-    const selectedRevisions = state.maybeBase
-        .flatMap(base => state.maybeHead.map(head => getRevisionsBetween(base, head)))
-        .getOrElse([])
-
+    const maybeOffsetX = maybeFocus.map(x => x.offsetX);
     const createHeadLine = (isFocusLine: boolean = false) => (
         createLine(
             ['head-line', isFocusLine ? 'focus-line' : ''].filter(identity).join(' '),
-            isFocusLine ? state.maybeFocus.getOrElse(0) : state.maybeHead.map(d => xScale(d)).getOrElse(0),
-            isFocusLine ? state.maybeFocus.isEmpty : state.maybeHead.isEmpty,
+            isFocusLine ? maybeOffsetX.getOrElse(0) : maybeHead.map(d => xScale(d)).getOrElse(0),
+            isFocusLine ? maybeOffsetX.isEmpty : maybeHead.isEmpty,
             'Head',
             false
         )
     );
-
     const createBaseLine = (isFocusLine: boolean = false) => (
         createLine(
             ['base-line', isFocusLine ? 'focus-line' : ''].filter(identity).join(' '),
-            isFocusLine ? state.maybeFocus.getOrElse(0) : state.maybeBase.map(d => xScale(d)).getOrElse(0),
-            isFocusLine ? state.maybeFocus.isEmpty : state.maybeBase.isEmpty,
+            isFocusLine ? maybeOffsetX.getOrElse(0) : maybeBase.map(d => xScale(d)).getOrElse(0),
+            isFocusLine ? maybeOffsetX.isEmpty : maybeBase.isEmpty,
             'Base',
             true
         )
@@ -191,8 +208,8 @@ const render = (state: State) => {
     );
 
     const createMasks = (): VNode => (
-        svg('g', state.maybeBase.flatMap(base => (
-            state.maybeHead.map(head => (
+        svg('g', maybeBase.flatMap(base => (
+            maybeHead.map(head => (
                 [
                     svg('rect', {
                         class: 'mask',
@@ -211,38 +228,72 @@ const render = (state: State) => {
         )).getOrElse([]))
     );
 
+    class FocusedRevisionsListTransformHook {
+        constructor() {}
+
+        hook(node: HTMLElement) {
+            setTimeout(() => {
+                const offsetX = maybeDebouncedFocus.map(focus => focus.offsetX).getOrElse(0);
+                const offsetY = maybeDebouncedFocus.map(focus => focus.offsetY).getOrElse(0);
+                node.style.transform = `translate(
+                    ${offsetX + margin.left + Math.floor(lineWidth / 2)}px,
+                    ${node.offsetHeight * -1}px
+                )`;
+            });
+        }
+    }
+
     return h('div', [
         h('h1', 'Tardis'),
-        svg('svg', { width: outerWidth, height: outerHeight }, [
-            svg('g', { transform: `translate(${margin.left},${margin.top})` }, [
-                svg('g', { class: 'x axis', transform: `translate(0,${height})` }, [ xAxisVNode ]),
-                svg('g', state.revisions.map(createRevision)),
-                createMasks(),
-                createHeadLine(),
-                createBaseLine(),
-                state.baseMode ? createBaseLine(true) : createHeadLine(true),
-                svg('rect', {
-                    class: 'overlay',
-                    width: String(width),
-                    height: String(outerHeight),
-                    onmousemove: (event: MouseEvent) => {
-                        const x = event.offsetX;
-                        focusSubject.onNext(Option(x))
-                    },
-                    onclick: (event: MouseEvent) => {
-                        if (state.baseMode) {
-                            const x = event.offsetX;
-                            const date = xScale.invert(x);
-                            baseSubject.onNext(Option(date));
-                        } else {
-                            const x = event.offsetX;
-                            const date = xScale.invert(x);
-                            headSubject.onNext(Option(date));
-                        }
-                    },
-                    onmouseleave: () => focusSubject.onNext(None)
-                }, [])
-            ])
+        h('div', { style: { position: 'relative', marginTop: '150px' } }, [
+            svg('svg', { width: outerWidth, height: outerHeight, style: { display: 'block' } }, [
+                svg('g', { transform: `translate(${margin.left},${margin.top})` }, [
+                    svg('g', { class: 'x axis', transform: `translate(0,${height})` }, [ xAxisVNode ]),
+                    svg('g', revisions.map(createRevision)),
+                    createMasks(),
+                    createHeadLine(),
+                    createBaseLine(),
+                    baseMode ? createBaseLine(true) : createHeadLine(true),
+                    svg('rect', {
+                        class: 'overlay',
+                        width: String(width),
+                        height: String(outerHeight),
+                        onmousemove: (event: MouseEvent) => {
+                            const { offsetY, offsetX } = event;
+                            focusSubject.onNext(Option({ offsetY, offsetX }))
+                        },
+                        onclick: (event: MouseEvent) => {
+                            if (baseMode) {
+                                const x = event.offsetX;
+                                const date = xScale.invert(x);
+                                baseSubject.onNext(Option(date));
+                            } else {
+                                const x = event.offsetX;
+                                const date = xScale.invert(x);
+                                headSubject.onNext(Option(date));
+                            }
+                        },
+                        onmouseleave: () => focusSubject.onNext(None)
+                    }, [])
+                ])
+            ]),
+            maybeFocusedRevisions
+                .map((focusedRevisions): VNode | undefined => (
+                    h('ul', {
+                        style: {
+                            border: '1px solid',
+                            position: 'absolute',
+                            top: 0,
+                            willChange: 'transform',
+                            margin: 0,
+                            background: 'white',
+                        },
+                        "transform-hook": new FocusedRevisionsListTransformHook(),
+                        onmouseenter: () => focusedRevisionsHoverSubject.onNext(true),
+                        onmouseleave: () => focusedRevisionsHoverSubject.onNext(false)
+                    }, focusedRevisions.map(revision => h('li', JSON.stringify(revision))))
+                ))
+                .getOrElse(undefined),
         ]),
         h('div', [
             h('button', { onclick: (event: MouseEvent) => resetSubject.onNext(true) }, [ 'Reset' ]),
@@ -250,18 +301,14 @@ const render = (state: State) => {
                 h('input', {
                     onchange: (event: Event) => baseModeSubject.onNext((event.target as HTMLInputElement).checked),
                     type: 'checkbox',
-                    checked: state.baseMode
+                    checked: baseMode
                 }, []),
                 'Select base'
             ])
         ]),
         h('div', [
-            h('p', `Version of dataset (head): ${state.maybeHead.map(head => String(head.getTime())).getOrElse('')}`),
-            h('p', `Show changes since (base): ${state.maybeBase.map(base => String(base.getTime())).getOrElse('')}`),
-            h('h2', 'Selected revisions'),
-            h('ul', selectedRevisions.map(revision => h('li', JSON.stringify(revision)))),
-            h('h2', 'Focused revisions'),
-            h('ul', focusedRevisions.map(revision => h('li', JSON.stringify(revision)))),
+            h('p', `Version of dataset (head): ${maybeHead.map(head => String(head.getTime())).getOrElse('')}`),
+            h('p', `Show changes since (base): ${maybeBase.map(base => String(base.getTime())).getOrElse('')}`),
         ])
     ]);
 };
