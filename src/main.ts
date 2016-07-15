@@ -34,7 +34,6 @@ const revisions$: Observable<Revision[]> = Observable.timer(2000).map(x => (
     }))
 ))
     .startWith([])
-    .do(revisions => console.log(JSON.stringify(revisions, null, '\t')));
 
 //
 // Observables and subjects
