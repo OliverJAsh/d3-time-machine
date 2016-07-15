@@ -220,8 +220,7 @@ const render = (state: State) => {
                 state.baseMode ? createBaseLine(true) : createHeadLine(true),
                 svg('rect', {
                     class: 'overlay',
-                    x: margin.left * -1,
-                    width: String(outerWidth),
+                    width: String(width),
                     height: String(outerHeight),
                     onmousemove: (event: MouseEvent) => {
                         const x = event.offsetX;
