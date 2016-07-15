@@ -28,18 +28,6 @@ interface State {
     maybeFocusedRevisions: Option<Revision[]>
 }
 
-const rint = (n: number) => (Math.random() * (n + 1)) | 0;
-const rdate = (): Date => new Date(2016, rint(11), rint(28), rint(23));
-const revisions$: Observable<Revision[]> = Observable.timer(2000).map(x => (
-    range(0, 30).map((x, id) => ({
-        id,
-        datasetSlug: 'fraud',
-        createdAt: rdate(),
-        authorName: 'Bob'
-    }))
-))
-    .startWith([])
-
 const radius = 15;
 const margin = {top: 0, right: radius, bottom: 30, left: radius};
 const outerWidth = 700;
@@ -58,6 +46,18 @@ const baseSubject = new Subject<Option<Date>>()
 const headSubject = new Subject<Option<Date>>()
 const focusSubject = new Subject<Option<Focus>>()
 const focusedRevisionsHoverSubject = new Subject<boolean>()
+
+const rint = (n: number) => (Math.random() * (n + 1)) | 0;
+const rdate = (): Date => new Date(2016, rint(11), rint(28), rint(23));
+const revisions$: Observable<Revision[]> = Observable.timer(2000).map(x => (
+    range(0, 30).map((x, id) => ({
+        id,
+        datasetSlug: 'fraud',
+        createdAt: rdate(),
+        authorName: 'Bob'
+    }))
+))
+    .startWith([])
 
 const inputHead$: Observable<Option<Date>> = Observable.merge(headSubject, resetSubject.map(x => None))
     .startWith(None)
