@@ -93,75 +93,7 @@ const xAxis = d3.svg.axis()
     .ticks(d3.time.month)
     .tickFormat(d3.time.format('%m'));
 
-const bodySelection = d3.select('body')
-const mainGroupSelection = bodySelection
-    .append('svg')
-    .attr('width', outerWidth)
-    .attr('height', outerHeight)
-    .append('g')
-    .attr('transform', `translate(${margin.left},${margin.top})`);
-
-mainGroupSelection.append('g')
-    .attr('class', 'x axis')
-    .attr('transform', `translate(0,${height})`)
-    .call(xAxis);
-
-// Circles
-mainGroupSelection.append('g')
-    .selectAll('.dot')
-    .data(revisions)
-    .enter()
-    .append('circle')
-    .attr('class', 'dot')
-    .attr('r', radius)
-    .attr('cx', d => xScale(d.createdAt))
-    .attr('cy', height / 2)
-    .append('title')
-    .text(d => d.id)
-
 const lineWidth = 3;
-const createLine = (): d3.Selection<any> => (
-    mainGroupSelection.append('line')
-        .attr('stroke-width', lineWidth)
-        .attr('y1', 0)
-        .attr('y2', outerHeight - margin.bottom)
-);
-
-const activeLineSelection = createLine().attr('class', 'active-line');
-const baselineLineSelection = createLine().attr('class', 'baseline-line');
-const focusLineSelection = createLine().attr('class', 'focus-line');
-
-const interactionRectSelection = mainGroupSelection
-    .append('rect');
-
-const interactionRectEl = interactionRectSelection.node();
-interactionRectSelection
-    .classed('overlay', true)
-    .attr('width', outerWidth)
-    .attr('height', outerHeight)
-    .on('mousemove', () => {
-        const [x] = d3.mouse(interactionRectEl);
-        focusSubject.onNext(Option(x))
-    })
-
-const toolbarSelection = bodySelection.append('div');
-
-toolbarSelection.append('button')
-    .text('Reset')
-    .on('click', () => resetSubject.onNext(true))
-
-const baselineCheckboxLabelSelection = toolbarSelection.append('label')
-baselineCheckboxLabelSelection.append('span').text('Select baseline');
-const baselineCheckboxSelection = baselineCheckboxLabelSelection
-    .append('input')
-
-baselineCheckboxSelection
-    .attr('type', 'checkbox')
-    .on('change', () => baselineModeSubject.onNext(baselineCheckboxSelection.property('checked')))
-
-const activeSelection = bodySelection.append('p')
-const baselineSelection = bodySelection.append('p')
-const focusedRevisionsSelection = bodySelection.append('ul')
 
 const state$: Observable<State> = Observable.combineLatest(
     baselineMode$, active$, baseline$, focus$,
@@ -180,42 +112,164 @@ const getRevisionsFor = (x: number): Revision[] => (
 const render = (state: State) => {
     console.log('render', state);
 
-    baselineCheckboxSelection.property('checked', state.baselineMode);
+    const mainGroupSelectionUpdate = d3.select('body').selectAll('svg').data([1]);
+    const mainGroupSelectionEnter = mainGroupSelectionUpdate
+        .enter()
+        .append('svg')
+        .attr('width', outerWidth)
+        .attr('height', outerHeight);
 
-    activeLineSelection
+    mainGroupSelectionEnter
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    mainGroupSelectionEnter
+        .append('g')
+        .attr('class', 'x axis')
+        .attr('transform', `translate(0,${height})`)
+        .call(xAxis);
+
+    //
+    // Circles
+    //
+
+    mainGroupSelectionEnter
+        .append('g')
+        .selectAll('.dot')
+        .data(revisions)
+        .enter()
+        .append('circle')
+        .attr('class', 'dot')
+        .attr('r', radius)
+        .attr('cx', d => xScale(d.createdAt))
+        .attr('cy', height / 2)
+        .append('title')
+        .text(d => d.id)
+
+    //
+    // Lines
+    //
+
+    const linesSelectionUpdate = mainGroupSelectionUpdate.selectAll('.lines').data([1]);
+
+    // Enter
+    const linesSelectionEnter = linesSelectionUpdate.enter().append('g').classed('lines', true);
+    const appendLine = (): d3.Selection<any> => (
+        linesSelectionEnter.append('line')
+            .attr('stroke-width', lineWidth)
+            .attr('y1', 0)
+            .attr('y2', outerHeight - margin.bottom)
+    );
+
+    appendLine().attr('class', 'active-line');
+    appendLine().attr('class', 'baseline-line');
+    appendLine().attr('class', 'focus-line');
+
+    // Enter + update
+    linesSelectionUpdate.select('.active-line')
         .attr('transform', state.maybeActive.map(active => `translate(${xScale(active)})`).getOrElse(''))
         .style('display', state.maybeActive.isEmpty ? 'none' : '')
 
-    baselineLineSelection
+    linesSelectionUpdate.select('.baseline-line')
         .attr('transform', state.maybeBaseline.map(baseline => `translate(${xScale(baseline)})`).getOrElse(''))
         .style('display', state.maybeBaseline.isEmpty ? 'none' : '')
 
-    focusLineSelection
+    linesSelectionUpdate.select('.focus-line')
         .attr('transform', state.maybeFocus.map(focus => `translate(${focus})`).getOrElse(''))
         .style('display', state.maybeFocus.isEmpty ? 'none' : '')
-        .classed('baseline-mode', state.baselineMode)
+        .classed('baseline-mode', state.baselineMode);
 
-    interactionRectSelection.on('click', () => {
+    //
+    // Interaction rect
+    //
+
+    const interactionRectSelectionUpdate = mainGroupSelectionUpdate
+        .selectAll('.overlay')
+        .data([1]);
+
+    // Enter
+    const interactionRectSelectionEnter = interactionRectSelectionUpdate.enter()
+    interactionRectSelectionEnter
+        .append('rect')
+        .classed('overlay', true)
+        .attr('width', outerWidth)
+        .attr('height', outerHeight)
+        .on('mousemove', () => {
+            const [x] = d3.mouse(interactionRectSelectionUpdate.node());
+            focusSubject.onNext(Option(x))
+        });
+
+    // Enter + update
+    interactionRectSelectionUpdate.on('click', () => {
         if (state.baselineMode) {
-            const [x] = d3.mouse(interactionRectEl);
+            const [x] = d3.mouse(interactionRectSelectionUpdate.node());
             const date = xScale.invert(x);
             baselineSubject.onNext(Option(date));
         } else {
-            const [x] = d3.mouse(interactionRectEl);
+            const [x] = d3.mouse(interactionRectSelectionUpdate.node());
             const date = xScale.invert(x);
             activeSubject.onNext(Option(date));
         }
-    });
+    })
 
-    activeSelection.text(`Active: ${state.maybeActive
+    //
+    // Toolbar
+    //
+
+    const bodySelection = d3.select('body');
+    const toolbarSelection = bodySelection.selectAll('.toolbar').data([1]);
+
+    // Enter
+    const toolbarSelectionEnter = toolbarSelection.enter()
+        .append('div')
+        .classed('toolbar', true);
+
+    toolbarSelectionEnter.append('button')
+        .text('Reset')
+        .on('click', () => resetSubject.onNext(true))
+
+    const baselineCheckboxLabelSelection = toolbarSelectionEnter.append('label')
+    baselineCheckboxLabelSelection.append('span').text('Select baseline');
+    const baselineCheckboxSelection = baselineCheckboxLabelSelection
+        .append('input')
+
+    baselineCheckboxSelection
+        .attr('type', 'checkbox')
+        .on('change', () => baselineModeSubject.onNext(baselineCheckboxSelection.property('checked')))
+
+    // Enter + update
+    // TODO: Why can't I re-use the input selection above?
+    const baselineCheckboxSelectionUpdate = toolbarSelection.select('input');
+    baselineCheckboxSelectionUpdate
+        .property('checked', state.baselineMode);
+
+    //
+    // Output
+    //
+
+    const outputSelection = bodySelection.selectAll('.output').data([1]);
+
+    // Enter
+    const outputSelectionEnter = outputSelection.enter().append('div').classed('output', true);
+
+    outputSelectionEnter.append('p').classed('active', true);
+    outputSelectionEnter.append('p').classed('baseline', true);
+    outputSelectionEnter.append('ul').classed('focused-revisions', true);
+
+    // Enter + update
+    outputSelection.select('.active')
+        .text(`Active: ${state.maybeActive
         .map(active => String(active.getTime())).getOrElse('')}`)
-    baselineSelection.text(`Baseline: ${state.maybeBaseline
+    outputSelection.select('.baseline')
+        .text(`Baseline: ${state.maybeBaseline
         .map(baseline => String(baseline.getTime())).getOrElse('')}`)
-
     const focusedRevisions = state.maybeFocus.map(getRevisionsFor).getOrElse([]);
-    focusedRevisionsSelection.html(focusedRevisions
-        .map(revision => `<li>${JSON.stringify(revision, null, '\t')}</li>`)
-        .join(''))
+    outputSelection.select('.focused-revisions')
+        .html(
+            focusedRevisions
+            .map(revision => `<li>${JSON.stringify(revision, null, '\t')}</li>`)
+            .join('')
+        );
 };
 
 state$.subscribe(render);
