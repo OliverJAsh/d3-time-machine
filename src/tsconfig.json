@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "noImplicitAny": true,
+        "strictNullChecks": true
+    },
+    "files": [
+        "./main.ts",
+        "./typings/index.d.ts",
+        "./manual-typings.d.ts",
+        // https://github.com/Microsoft/TypeScript/issues/3005
+        "../node_modules/typescript/lib/lib.es6.d.ts"
+    ]
+}
